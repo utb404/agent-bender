@@ -1,0 +1,50 @@
+{
+  "test_case": {
+    "id": "TC-001",
+    "title": "Авторизация пользователя",
+    "description": "Проверка успешной авторизации пользователя с валидными данными",
+    "priority": "High",
+    "tags": ["authentication", "smoke"],
+    "preconditions": [
+      "Пользователь зарегистрирован в системе",
+      "Браузер открыт"
+    ],
+    "steps": [
+      {
+        "step_number": 1,
+        "action": "navigate",
+        "target": "url",
+        "value": "https://example.com/login",
+        "description": "Открыть страницу входа"
+      },
+      {
+        "step_number": 2,
+        "action": "fill",
+        "target": "input[name='username']",
+        "value": "test_user",
+        "description": "Ввести имя пользователя"
+      },
+      {
+        "step_number": 3,
+        "action": "fill",
+        "target": "input[name='password']",
+        "value": "password123",
+        "description": "Ввести пароль"
+      },
+      {
+        "step_number": 4,
+        "action": "click",
+        "target": "button[type='submit']",
+        "description": "Нажать кнопку входа"
+      },
+      {
+        "step_number": 5,
+        "action": "verify",
+        "target": "dashboard",
+        "description": "Проверить переход на главную страницу"
+      }
+    ],
+    "expected_result": "Пользователь успешно авторизован и перенаправлен на главную страницу"
+  }
+}
+

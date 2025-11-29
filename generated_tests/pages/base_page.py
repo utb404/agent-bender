@@ -1,0 +1,61 @@
+"""
+Базовый класс для всех Page Objects
+"""
+
+from playwright.sync_api import Page, Locator
+from typing import Optional
+
+
+class BasePage:
+    """Базовый класс для всех Page Object"""
+
+    def __init__(self, page: Page):
+        """
+        Инициализация базового Page Object.
+
+        Args:
+            page: Экземпляр страницы Playwright.
+        """
+        self.page = page
+
+    def wait_for_page_load(self, timeout: int = 30000) -> None:
+        """Ожидание загрузки страницы"""
+        self.page.wait_for_load_state("networkidle", timeout=timeout)
+
+    def wait_for_element(
+        self, selector: str, timeout: int = 10000, state: str = "visible"
+    ) -> Locator:
+        """
+        Ожидание появления элемента.
+
+        Args:
+            selector: Селектор элемента.
+            timeout: Таймаут ожидания в миллисекундах.
+            state: Состояние элемента (visible, hidden, attached, detached).
+
+        Returns:
+            Locator: Локатор элемента.
+        """
+        locator = self.page.locator(selector)
+        locator.wait_for(state=state, timeout=timeout)
+        return locator
+
+    def take_screenshot(self, path: Optional[str] = None) -> bytes:
+        """
+        Сделать скриншот страницы.
+
+        Args:
+            path: Путь для сохранения скриншота (опционально).
+
+        Returns:
+            bytes: Скриншот в виде байтов.
+        """
+        return self.page.screenshot(path=path, full_page=True)
+
+    def get_title(self) -> str:
+        """Получить заголовок страницы"""
+        return self.page.title()
+
+    def get_url(self) -> str:
+        """Получить текущий URL"""
+        return self.page.url

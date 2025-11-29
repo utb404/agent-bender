@@ -1,0 +1,48 @@
+"""
+Page Object для страницы: {{ page_name }}
+"""
+
+from playwright.sync_api import Page, Locator
+from pages.base_page import BasePage
+
+
+class {{ page_class_name }}(BasePage):
+    """Page Object для страницы {{ page_name }}"""
+    
+    def __init__(self, page: Page):
+        super().__init__(page)
+        {% if url %}
+        self.url = "{{ url }}"
+        {% endif %}
+        
+        # Локаторы элементов
+        {% for element_name, selector in elements.items() %}
+        self._{{ element_name }} = page.locator("{{ selector }}")
+        {% endfor %}
+    
+    {% if url %}
+    def navigate(self) -> None:
+        """Открыть страницу"""
+        self.page.goto(self.url)
+        self.wait_for_page_load()
+    {% endif %}
+    
+    {% for method_name, method_info in methods.items() %}
+    def {{ method_name }}(self{% if method_info.params %}, {{ method_info.params }}{% endif %}) -> {% if method_info.return_type %}{{ method_info.return_type }}{% else %}None{% endif %}:
+        """
+        {{ method_info.description }}
+        """
+        {% if method_info.action == 'fill' %}
+        self._{{ method_info.target }}.fill({{ method_info.value }})
+        {% elif method_info.action == 'click' %}
+        self._{{ method_info.target }}.click()
+        {% elif method_info.action == 'get_text' %}
+        return self._{{ method_info.target }}.inner_text()
+        {% elif method_info.action == 'is_visible' %}
+        return self._{{ method_info.target }}.is_visible()
+        {% else %}
+        # TODO: Реализовать метод {{ method_info.action }}
+        pass
+        {% endif %}
+    {% endfor %}
+

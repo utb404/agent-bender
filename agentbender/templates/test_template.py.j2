@@ -1,0 +1,71 @@
+"""
+Сгенерированный тест для: {{ test_case.title }}
+Тест-кейс ID: {{ test_case.id }}
+"""
+
+import pytest
+from playwright.sync_api import Page, expect
+{% if page_objects %}
+{% for page_class in page_objects.keys() %}
+from pages.{{ page_class.lower().replace('page', '') }}_page import {{ page_class }}
+{% endfor %}
+{% endif %}
+{% if gpn_qa_utils_enabled %}
+from gpn_qa_utils import helpers
+{% endif %}
+
+
+{% if test_case.tags %}
+{% for tag in test_case.tags %}
+@pytest.mark.{{ tag }}
+{% endfor %}
+{% endif %}
+class Test{{ test_case.id.replace('-', '') }}:
+    """
+    {{ test_case.title }}
+    
+    Описание: {{ test_case.description }}
+    
+    Ожидаемый результат: {{ test_case.expected_result }}
+    {% if test_case.preconditions %}
+    
+    Предусловия:
+    {% for precondition in test_case.preconditions %}
+    - {{ precondition }}
+    {% endfor %}
+    {% endif %}
+    """
+    
+    {% if use_fixtures %}
+    @pytest.fixture(autouse=True)
+    def setup(self, page: Page):
+        """Подготовка тестового окружения"""
+        {% if page_objects %}
+        {% for page_class in page_objects.keys() %}
+        self.{{ page_class.lower().replace('page', '') }}_page = {{ page_class }}(page)
+        {% endfor %}
+        {% endif %}
+    {% endif %}
+    
+    def test_{{ test_case.id.lower().replace('-', '_') }}(self, page: Page):
+        """
+        {{ test_case.description }}
+        """
+        {% for step in test_case.steps %}
+        # Шаг {{ step.step_number }}: {{ step.description }}
+        {% if step.action == 'navigate' %}
+        page.goto("{{ step.value }}")
+        {% elif step.action == 'fill' %}
+        page.locator("{{ step.target }}").fill("{{ step.value }}")
+        {% elif step.action == 'click' %}
+        page.locator("{{ step.target }}").click()
+        {% elif step.action == 'verify' %}
+        expect(page.locator("{{ step.target }}")).to_be_visible()
+        {% else %}
+        # TODO: Реализовать действие {{ step.action }}
+        {% endif %}
+        {% endfor %}
+        
+        # Проверка ожидаемого результата
+        # {{ test_case.expected_result }}
+

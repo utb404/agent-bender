@@ -1,0 +1,56 @@
+# Пример конфигурации AgentBender
+
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434"
+  model: "llama3"
+  temperature: 0.7
+  max_tokens: null
+  timeout: 300
+  max_retries: 3
+  retry_delay: 1.0
+  retry_backoff: 2.0
+  log_requests: true
+  log_responses: false
+  trace_requests: false
+
+output_dir: "./generated_tests"
+template_dir: null
+code_style: "black"
+use_cdp: false
+
+validation:
+  level: "basic"
+  validate_syntax: true
+  validate_structure: true
+  validate_playwright_usage: true
+  validate_page_object_pattern: true
+  validate_test_coverage: true
+
+performance:
+  max_workers: 4
+  enable_async: true
+  enable_caching: true
+  cache_ttl: 3600
+  batch_prompts: true
+  prompt_compression: false
+  max_prompt_length: 8000
+  max_response_length: 4000
+
+logging:
+  level: "INFO"
+  format: "json"
+  file: null
+  enable_tracing: false
+
+gpn_qa_utils:
+  enabled: true
+  import_path: "from gpn_qa_utils import helpers"
+
+playwright:
+  browser: "chromium"
+  headless: true
+  timeout: 30000
+  viewport_width: 1920
+  viewport_height: 1080
+
