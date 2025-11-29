@@ -30,6 +30,9 @@ htmlcov/
 config.yaml
 test_case.json
 
+# Generated tests (user-specific output)
+generated_tests/
+
 # OS
 .DS_Store
 Thumbs.db
