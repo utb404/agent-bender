@@ -5,6 +5,7 @@ import logging
 
 from agentbender.models.test_case import TestCase
 from agentbender.models.config import GenerationContext, GenerationOptions
+from agentbender.utils.cdp_helper import CDPAnalysisResult
 
 
 logger = logging.getLogger(__name__)
@@ -117,7 +118,8 @@ Playwright и паттерна Page Object Model.
         page_name: str,
         elements: Dict[str, str],
         actions: Dict[str, Any],
-        options: GenerationOptions
+        options: GenerationOptions,
+        cdp_analysis: Optional[CDPAnalysisResult] = None
     ) -> str:
         """
         Построение промпта для генерации Page Object.
@@ -127,6 +129,7 @@ Playwright и паттерна Page Object Model.
             elements: Словарь элементов (имя -> селектор).
             actions: Словарь действий.
             options: Опции генерации.
+            cdp_analysis: Результат CDP анализа (опционально).
         
         Returns:
             str: Промпт для LLM.
@@ -139,6 +142,34 @@ Playwright и паттерна Page Object Model.
         prompt_parts.append("Элементы страницы:")
         for element_name, selector in elements.items():
             prompt_parts.append(f"  - {element_name}: {selector}")
+        
+        # CDP анализ (если доступен)
+        if cdp_analysis and cdp_analysis.element_info:
+            prompt_parts.append("\nАнализ элементов через CDP (Chrome DevTools Protocol):")
+            for selector, element_info in cdp_analysis.element_info.items():
+                prompt_parts.append(f"\n  Селектор: {selector}")
+                prompt_parts.append(f"    - Тег: {element_info.tag_name}")
+                if element_info.attributes:
+                    important_attrs = {
+                        k: v for k, v in element_info.attributes.items()
+                        if k in ["id", "name", "data-testid", "type", "role", "aria-label"]
+                    }
+                    if important_attrs:
+                        prompt_parts.append(f"    - Атрибуты: {important_attrs}")
+                if element_info.suggested_selectors:
+                    prompt_parts.append(f"    - Рекомендуемые селекторы: {', '.join(element_info.suggested_selectors[:3])}")
+                prompt_parts.append(f"    - Видимый: {element_info.is_visible}")
+                prompt_parts.append(f"    - Интерактивный: {element_info.is_interactive}")
+            
+            # Информация об улучшенных селекторах
+            if cdp_analysis.improved_selectors:
+                improved_count = sum(
+                    1 for orig, improved in cdp_analysis.improved_selectors.items()
+                    if orig != improved
+                )
+                if improved_count > 0:
+                    prompt_parts.append(f"\n  Примечание: {improved_count} селекторов были улучшены через CDP анализ.")
+                    prompt_parts.append("  Используй улучшенные селекторы, так как они более стабильны и точны.")
         
         # Действия на странице
         if actions:
@@ -153,6 +184,10 @@ Playwright и паттерна Page Object Model.
         prompt_parts.append("- Создать методы для всех действий")
         prompt_parts.append("- Добавить методы валидации")
         prompt_parts.append("- Использовать приватные атрибуты для локаторов (с префиксом _)")
+        
+        if cdp_analysis:
+            prompt_parts.append("- Приоритет селекторов: data-testid > id > name > role > комбинация атрибутов")
+            prompt_parts.append("- Использовать наиболее стабильные селекторы из CDP анализа")
         
         prompt_parts.append("\nВерни только Python код класса без дополнительных объяснений.")
         

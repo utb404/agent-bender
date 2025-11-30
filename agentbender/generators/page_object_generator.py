@@ -11,6 +11,7 @@ from agentbender.models.config import GenerationOptions
 from agentbender.providers.base_provider import BaseLLMProvider
 from agentbender.core.prompt_builder import PromptBuilder
 from agentbender.utils.formatter import CodeFormatter
+from agentbender.utils.cdp_helper import CDPHelper, CDPAnalysisResult
 
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,10 @@ class PageObjectGenerator:
         # Анализ тест-кейса для определения страниц
         pages_info = self._analyze_pages(test_case)
         
+        # Улучшение селекторов через CDP, если включено
+        if options.use_cdp:
+            pages_info = self._improve_selectors_with_cdp(pages_info, options)
+        
         page_objects = {}
         
         for page_name, page_info in pages_info.items():
@@ -80,7 +85,8 @@ class PageObjectGenerator:
                     actions=page_info["actions"],
                     url=page_info.get("url"),
                     context=context,
-                    options=options
+                    options=options,
+                    cdp_analysis=page_info.get("cdp_analysis")
                 )
                 
                 class_name = self._page_name_to_class_name(page_name)
@@ -107,7 +113,8 @@ class PageObjectGenerator:
         actions: Dict[str, Any],
         url: Optional[str] = None,
         context: Optional[Any] = None,
-        options: Optional[GenerationOptions] = None
+        options: Optional[GenerationOptions] = None,
+        cdp_analysis: Optional[CDPAnalysisResult] = None
     ) -> str:
         """
         Генерация Page Object класса.
@@ -119,6 +126,7 @@ class PageObjectGenerator:
             url: URL страницы (опционально).
             context: Контекст генерации.
             options: Опции генерации.
+            cdp_analysis: Результат CDP анализа (опционально).
         
         Returns:
             str: Код Page Object класса.
@@ -133,7 +141,8 @@ class PageObjectGenerator:
             page_name=page_name,
             elements=elements,
             actions=actions,
-            options=options
+            options=options,
+            cdp_analysis=cdp_analysis
         )
         
         # Генерация через LLM
@@ -200,6 +209,107 @@ class PageObjectGenerator:
                 }
         
         return pages_info
+    
+    def _improve_selectors_with_cdp(
+        self,
+        pages_info: Dict[str, Dict[str, Any]],
+        options: GenerationOptions
+    ) -> Dict[str, Dict[str, Any]]:
+        """
+        Улучшение селекторов через CDP анализ.
+        
+        Args:
+            pages_info: Информация о страницах.
+            options: Опции генерации.
+        
+        Returns:
+            Dict: Обновленная информация о страницах с улучшенными селекторами.
+        """
+        if not options.use_cdp:
+            return pages_info
+        
+        try:
+            from playwright.sync_api import sync_playwright
+            
+            cdp_helper = CDPHelper(logger=self.logger)
+            improved_pages_info = {}
+            
+            with sync_playwright() as p:
+                # Запуск браузера
+                browser = p.chromium.launch(headless=True)
+                context = browser.new_context()
+                
+                for page_name, page_info in pages_info.items():
+                    url = page_info.get("url")
+                    if not url:
+                        # Если нет URL, пропускаем CDP анализ
+                        improved_pages_info[page_name] = page_info
+                        continue
+                    
+                    try:
+                        page = context.new_page()
+                        
+                        # Анализ селекторов через CDP
+                        target_selectors = list(page_info["elements"].values())
+                        if target_selectors:
+                            cdp_result = cdp_helper.analyze_page_for_selectors(
+                                page=page,
+                                target_selectors=target_selectors,
+                                url=url
+                            )
+                            
+                            # Обновление селекторов
+                            improved_elements = {}
+                            for element_name, original_selector in page_info["elements"].items():
+                                improved_selector = cdp_result.improved_selectors.get(
+                                    original_selector,
+                                    original_selector
+                                )
+                                improved_elements[element_name] = improved_selector
+                            
+                            # Обновление actions с улучшенными селекторами
+                            improved_actions = {}
+                            for action_name, action_info in page_info["actions"].items():
+                                action_target = action_info.get("target")
+                                if action_target and action_target in cdp_result.improved_selectors:
+                                    improved_action_info = action_info.copy()
+                                    improved_action_info["target"] = cdp_result.improved_selectors[action_target]
+                                    improved_actions[action_name] = improved_action_info
+                                else:
+                                    improved_actions[action_name] = action_info
+                            
+                            improved_pages_info[page_name] = {
+                                "elements": improved_elements,
+                                "actions": improved_actions,
+                                "url": url,
+                                "cdp_analysis": cdp_result
+                            }
+                            
+                            self.logger.info(
+                                f"CDP анализ для {page_name}: улучшено {len(cdp_result.improved_selectors)} селекторов"
+                            )
+                        else:
+                            improved_pages_info[page_name] = page_info
+                        
+                        page.close()
+                    
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Ошибка при CDP анализе для {page_name}: {e}. Используются оригинальные селекторы."
+                        )
+                        improved_pages_info[page_name] = page_info
+                
+                browser.close()
+                cdp_helper.cleanup()
+            
+            return improved_pages_info
+        
+        except ImportError:
+            self.logger.warning("Playwright не установлен. CDP анализ пропущен.")
+            return pages_info
+        except Exception as e:
+            self.logger.warning(f"Ошибка при инициализации CDP: {e}. Используются оригинальные селекторы.")
+            return pages_info
     
     def _extract_page_name_from_url(self, url: str) -> str:
         """Извлечение имени страницы из URL."""
