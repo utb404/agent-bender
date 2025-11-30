@@ -11,37 +11,34 @@
     ],
     "steps": [
       {
-        "step_number": 1,
-        "action": "navigate",
-        "target": "url",
-        "value": "https://example.com/login",
-        "description": "Открыть страницу входа"
+        "id": "1",
+        "name": "Шаг 1",
+        "description": "Открыть страницу входа по адресу https://example.com/login",
+        "expectedResult": "Страница входа загружена и отображается форма авторизации"
       },
       {
-        "step_number": 2,
-        "action": "fill",
-        "target": "input[name='username']",
-        "value": "test_user",
-        "description": "Ввести имя пользователя"
+        "id": "2",
+        "name": "Шаг 2",
+        "description": "Ввести имя пользователя 'test_user' в поле для ввода имени пользователя",
+        "expectedResult": "Имя пользователя введено в поле"
       },
       {
-        "step_number": 3,
-        "action": "fill",
-        "target": "input[name='password']",
-        "value": "password123",
-        "description": "Ввести пароль"
+        "id": "3",
+        "name": "Шаг 3",
+        "description": "Ввести пароль 'password123' в поле для ввода пароля",
+        "expectedResult": "Пароль введен в поле"
       },
       {
-        "step_number": 4,
-        "action": "click",
-        "target": "button[type='submit']",
-        "description": "Нажать кнопку входа"
+        "id": "4",
+        "name": "Шаг 4",
+        "description": "Нажать кнопку входа (submit)",
+        "expectedResult": "Форма отправлена, выполняется авторизация"
       },
       {
-        "step_number": 5,
-        "action": "verify",
-        "target": "dashboard",
-        "description": "Проверить переход на главную страницу"
+        "id": "5",
+        "name": "Шаг 5",
+        "description": "Проверить, что произошел переход на главную страницу (dashboard)",
+        "expectedResult": "Пользователь успешно авторизован и перенаправлен на главную страницу"
       }
     ],
     "expected_result": "Пользователь успешно авторизован и перенаправлен на главную страницу"
