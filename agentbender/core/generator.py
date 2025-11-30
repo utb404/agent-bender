@@ -26,6 +26,7 @@ from agentbender.core.validator import CodeValidator
 from agentbender.generators.test_generator import TestCodeGenerator
 from agentbender.generators.page_object_generator import PageObjectGenerator
 from agentbender.generators.fixture_generator import FixtureGenerator
+from agentbender.generators.step_generator import StepGenerator
 from agentbender.utils.formatter import CodeFormatter
 from agentbender.utils.file_manager import FileManager
 
@@ -116,6 +117,11 @@ class TestGenerator:
         
         # Генераторы
         template_dir = self.config.template_dir
+        self.step_generator = StepGenerator(
+            llm_provider=self.llm_provider,
+            formatter=self.formatter,
+            logger=self.logger
+        )
         self.test_generator = TestCodeGenerator(
             llm_provider=self.llm_provider,
             template_dir=template_dir,
@@ -178,6 +184,16 @@ class TestGenerator:
             
             # Объединение опций
             final_options = self._merge_options(options)
+            
+            # Преобразование описательных шагов в структурированные через LLM
+            self.logger.info("Преобразование описательных шагов в структурированные...")
+            structured_steps = self.step_generator.generate_structured_steps(
+                test_case=parsed_test_case,
+                options=final_options
+            )
+            # Обновляем шаги в тест-кейсе
+            parsed_test_case.steps = structured_steps
+            self.logger.info(f"Преобразовано {len(structured_steps)} шагов")
             
             # Генерация Page Objects
             page_objects = {}

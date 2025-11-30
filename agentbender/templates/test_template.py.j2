@@ -52,17 +52,52 @@ class Test{{ test_case.id.replace('-', '') }}:
         {{ test_case.description }}
         """
         {% for step in test_case.steps %}
-        # Шаг {{ step.step_number }}: {{ step.description }}
+        # Шаг {{ step.step_number }}: {% if step.name %}{{ step.name }}: {% endif %}{{ step.description }}
+        {% if step.is_structured %}
         {% if step.action == 'navigate' %}
+        {% if step.value %}
         page.goto("{{ step.value }}")
+        {% else %}
+        # TODO: Указать URL для навигации
+        {% endif %}
         {% elif step.action == 'fill' %}
-        page.locator("{{ step.target }}").fill("{{ step.value }}")
+        {% if step.target %}
+        page.locator("{{ step.target }}").fill("{{ step.value or '' }}")
+        {% else %}
+        # TODO: Указать селектор для заполнения
+        {% endif %}
         {% elif step.action == 'click' %}
+        {% if step.target %}
         page.locator("{{ step.target }}").click()
+        {% else %}
+        # TODO: Указать селектор для клика
+        {% endif %}
         {% elif step.action == 'verify' %}
+        {% if step.target %}
         expect(page.locator("{{ step.target }}")).to_be_visible()
         {% else %}
-        # TODO: Реализовать действие {{ step.action }}
+        # TODO: Указать селектор для проверки
+        {% endif %}
+        {% elif step.action == 'download' %}
+        {% if step.target %}
+        # Скачивание файла
+        async with page.expect_download() as download_info:
+            page.locator("{{ step.target }}").click()
+        download = await download_info.value
+        # TODO: Сохранить файл в нужное место
+        {% else %}
+        # TODO: Реализовать скачивание на основе описания
+        {% endif %}
+        {% else %}
+        # TODO: Реализовать действие {{ step.action or 'неизвестное' }}
+        {% endif %}
+        {% else %}
+        # Шаг еще не обработан StepGenerator
+        # Описание: {{ step.description }}
+        {% if step.expectedResult %}
+        # Ожидаемый результат: {{ step.expectedResult }}
+        {% endif %}
+        # TODO: Реализовать действие на основе описания
         {% endif %}
         {% endfor %}
         

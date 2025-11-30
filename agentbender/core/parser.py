@@ -112,6 +112,10 @@ class TestCaseParser:
         """
         Парсинг тест-кейса из словаря.
         
+        Поддерживает два формата:
+        1. Структурированный: с явными action/target/value в шагах
+        2. Описательный: с описаниями действий на естественном языке
+        
         Args:
             data: Словарь с данными тест-кейса.
         
@@ -126,14 +130,19 @@ class TestCaseParser:
             data = data["test_case"]
         
         # Валидация обязательных полей
-        required_fields = ["id", "title", "description", "steps", "expected_result"]
-        missing_fields = [field for field in required_fields if field not in data]
-        
-        if missing_fields:
+        if "id" not in data:
             from agentbender.models.results import ValidationError
             raise ValidationError(
-                code="MISSING_FIELDS",
-                message=f"Отсутствуют обязательные поля: {', '.join(missing_fields)}",
+                code="MISSING_ID",
+                message="Отсутствует обязательное поле 'id'",
+                severity="error"
+            )
+        
+        if "steps" not in data:
+            from agentbender.models.results import ValidationError
+            raise ValidationError(
+                code="MISSING_STEPS",
+                message="Отсутствует обязательное поле 'steps'",
                 severity="error"
             )
         
@@ -142,7 +151,22 @@ class TestCaseParser:
         if isinstance(data["steps"], list):
             for i, step_data in enumerate(data["steps"]):
                 try:
-                    step = TestStep(**step_data)
+                    # Нормализация данных шага (удаляет action/target/value из входного JSON)
+                    normalized_step = self._normalize_step_data(step_data, i + 1)
+                    # Создаем TestStep без полей action/target/value (они будут заполнены StepGenerator)
+                    # Важно: исключаем action/target/value из словаря перед созданием TestStep
+                    step_dict = {k: v for k, v in normalized_step.items() 
+                                if k not in ["action", "target", "value"]}
+                    # Создаем TestStep с явно указанными None для action/target/value
+                    # (они должны заполняться только StepGenerator, а не из входного JSON)
+                    # ВАЖНО: всегда устанавливаем action/target/value в None, даже если они были в исходных данных
+                    step_dict_with_none = dict(step_dict)  # Создаем новый словарь
+                    step_dict_with_none["action"] = None
+                    step_dict_with_none["target"] = None
+                    step_dict_with_none["value"] = None
+                    # Убеждаемся, что исходные данные не попали в словарь
+                    assert "action" not in step_dict or step_dict["action"] is None
+                    step = TestStep.model_validate(step_dict_with_none, strict=False)
                     if step.step_number is None:
                         step.step_number = i + 1
                     steps.append(step)
@@ -167,26 +191,116 @@ class TestCaseParser:
                 severity="error"
             )
         
+        # Нормализация данных тест-кейса
+        normalized_data = self._normalize_test_case_data(data)
+        
         # Создание объекта TestCase
         try:
-            test_case = TestCase(
-                id=data["id"],
-                title=data["title"],
-                description=data["description"],
-                steps=steps,
-                expected_result=data["expected_result"],
-                preconditions=data.get("preconditions"),
-                tags=data.get("tags"),
-                priority=data.get("priority"),
-            )
+            test_case = TestCase(**normalized_data)
             return test_case
         except Exception as e:
-            from agentbender.models.results import ValidationError
-            raise ValidationError(
+            error = ValidationError(
                 code="CREATE_ERROR",
                 message=f"Ошибка при создании объекта TestCase: {e}",
                 severity="error"
             )
+            raise ValueError(f"{error.code}: {error.message}") from e
+    
+    def _normalize_step_data(self, step_data: Dict[str, Any], step_number: int) -> Dict[str, Any]:
+        """
+        Нормализация данных шага для формата test_case.json.
+        
+        Args:
+            step_data: Исходные данные шага.
+            step_number: Номер шага.
+        
+        Returns:
+            Dict: Нормализованные данные шага.
+        """
+        normalized = step_data.copy()
+        
+        # Установка номера шага, если не указан
+        if "step_number" not in normalized and "id" in normalized:
+            try:
+                normalized["step_number"] = int(normalized["id"])
+            except (ValueError, TypeError):
+                normalized["step_number"] = step_number
+        elif "step_number" not in normalized:
+            normalized["step_number"] = step_number
+        
+        # Если нет description, но есть name - используем name как description
+        if "description" not in normalized and "name" in normalized:
+            normalized["description"] = normalized["name"]
+        
+        # Удаляем поля структурированного формата, если они присутствуют
+        # (они не используются в описательном формате)
+        normalized.pop("action", None)
+        normalized.pop("target", None)
+        normalized.pop("value", None)
+        
+        return normalized
+    
+    def _normalize_test_case_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Нормализация данных тест-кейса для поддержки разных форматов.
+        
+        Args:
+            data: Исходные данные тест-кейса.
+        
+        Returns:
+            Dict: Нормализованные данные тест-кейса.
+        """
+        normalized = data.copy()
+        
+        # Нормализация названия
+        if "title" not in normalized and "name" in normalized:
+            normalized["title"] = normalized["name"]
+        elif "title" not in normalized:
+            normalized["title"] = normalized.get("id", "Untitled")
+        
+        # Нормализация описания
+        if "description" not in normalized:
+            normalized["description"] = normalized.get("name", "")
+        
+        # Нормализация ожидаемого результата
+        if "expected_result" not in normalized and "expectedResult" in normalized:
+            normalized["expected_result"] = normalized["expectedResult"]
+        elif "expected_result" not in normalized:
+            normalized["expected_result"] = ""
+        
+        # Нормализация предусловий
+        if "preconditions" in normalized:
+            if isinstance(normalized["preconditions"], str):
+                if normalized["preconditions"].strip():
+                    normalized["preconditions"] = [
+                        p.strip() for p in normalized["preconditions"].split("\n") if p.strip()
+                    ]
+                else:
+                    normalized["preconditions"] = None
+        elif "preconditions_text" in normalized:
+            preconditions_text = normalized["preconditions_text"]
+            if preconditions_text and isinstance(preconditions_text, str) and preconditions_text.strip():
+                normalized["preconditions"] = [
+                    p.strip() for p in preconditions_text.split("\n") if p.strip()
+                ]
+        
+        # Нормализация тегов
+        if "tags" in normalized:
+            if isinstance(normalized["tags"], str):
+                if normalized["tags"].strip():
+                    normalized["tags"] = [t.strip() for t in normalized["tags"].split(",") if t.strip()]
+                else:
+                    normalized["tags"] = None
+        elif "tags_text" in normalized:
+            tags_text = normalized["tags_text"]
+            if tags_text and isinstance(tags_text, str) and tags_text.strip():
+                normalized["tags"] = [t.strip() for t in tags_text.split(",") if t.strip()]
+        
+        # Нормализация ID
+        if "testCaseId" in normalized and "id" not in normalized:
+            normalized["id"] = normalized["testCaseId"]
+        
+        return normalized
     
     def validate(self, test_case: TestCase) -> ValidationReport:
         """
@@ -229,24 +343,16 @@ class TestCaseParser:
         
         # Проверка шагов
         for i, step in enumerate(test_case.steps):
-            if not step.action:
-                errors.append(ValidationError(
-                    code="EMPTY_ACTION",
-                    message=f"Шаг {i+1} не содержит действия",
-                    field=f"steps[{i}].action",
-                    severity="error"
-                ))
-            
             if not step.description:
-                warnings.append(ValidationWarning(
-                    code="MISSING_DESCRIPTION",
+                errors.append(ValidationError(
+                    code="EMPTY_DESCRIPTION",
                     message=f"Шаг {i+1} не содержит описания",
                     field=f"steps[{i}].description",
-                    suggestion="Добавьте описание шага для лучшего понимания"
+                    severity="error"
                 ))
         
         # Проверка ожидаемого результата
-        if not test_case.expected_result:
+        if not test_case.display_expected_result:
             warnings.append(ValidationWarning(
                 code="MISSING_EXPECTED_RESULT",
                 message="Отсутствует ожидаемый результат",
