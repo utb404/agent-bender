@@ -64,22 +64,26 @@ Playwright и паттерна Page Object Model.
         # Основная информация о тест-кейсе
         prompt_parts.append(f"Сгенерируй автотест на основе следующего тест-кейса:\n")
         prompt_parts.append(f"Тест-кейс ID: {test_case.id}")
-        prompt_parts.append(f"Название: {test_case.title}")
+        prompt_parts.append(f"Название: {test_case.display_title}")
         prompt_parts.append(f"Описание: {test_case.description}\n")
         
         # Шаги тест-кейса
         prompt_parts.append("Шаги:")
         for step in test_case.steps:
-            step_desc = f"  {step.step_number}. {step.description}"
-            if step.action:
-                step_desc += f" (действие: {step.action})"
-            if step.target:
-                step_desc += f" (цель: {step.target})"
-            if step.value:
-                step_desc += f" (значение: {step.value})"
+            step_desc = f"  {step.step_number}. "
+            if step.name:
+                step_desc += f"{step.name}: "
+            step_desc += step.description
+            
+            # Показываем ожидаемый результат, если есть
+            if step.expectedResult:
+                step_desc += f" (ожидаемый результат: {step.expectedResult})"
+            
             prompt_parts.append(step_desc)
         
-        prompt_parts.append(f"\nОжидаемый результат: {test_case.expected_result}")
+        expected_result = test_case.display_expected_result
+        if expected_result:
+            prompt_parts.append(f"\nОжидаемый результат: {expected_result}")
         
         # Предусловия
         if test_case.preconditions:

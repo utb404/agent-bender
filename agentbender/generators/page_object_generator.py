@@ -182,10 +182,37 @@ class PageObjectGenerator:
             page_name = "UnknownPage"
             url = None
             
-            if step.action == "navigate" and step.value:
-                url = step.value
-                # Извлечение имени страницы из URL
+            # Пытаемся извлечь информацию из описания или структурированных данных
+            description_lower = step.description.lower()
+            
+            # Если есть структурированные данные (после StepGenerator)
+            if step.is_structured:
+                if step.action == "navigate" and step.value:
+                    url = step.value
+                    page_name = self._extract_page_name_from_url(url)
+                elif step.action == "navigate" and step.target == "url" and step.value:
+                    url = step.value
+                    page_name = self._extract_page_name_from_url(url)
+            
+            # Поиск URL в описании
+            import re
+            url_match = re.search(r'https?://[^\s]+', step.description)
+            if url_match:
+                url = url_match.group(0)
                 page_name = self._extract_page_name_from_url(url)
+            # Определение страницы по ключевым словам
+            elif any(word in description_lower for word in ["кандидаты", "candidates"]):
+                page_name = "CandidatesPage"
+            elif any(word in description_lower for word in ["не кандидаты", "not candidates"]):
+                page_name = "NotCandidatesPage"
+            elif any(word in description_lower for word in ["ошибки", "errors"]):
+                page_name = "ErrorsPage"
+            elif any(word in description_lower for word in ["настройки", "settings"]):
+                page_name = "SettingsPage"
+            elif any(word in description_lower for word in ["мониторинг", "monitoring"]):
+                page_name = "MonitoringPage"
+            elif any(word in description_lower for word in ["дашборд", "dashboard"]):
+                page_name = "DashboardPage"
             
             if page_name not in pages_info:
                 pages_info[page_name] = {
@@ -195,17 +222,28 @@ class PageObjectGenerator:
                 }
             
             # Извлечение элементов и действий
-            if step.target:
+            if step.is_structured and step.target:
+                # Для структурированных шагов (после StepGenerator)
                 element_name = self._extract_element_name(step.target)
                 pages_info[page_name]["elements"][element_name] = step.target
-            
-            if step.action:
-                action_name = self._action_to_method_name(step.action, step.target)
+                
+                if step.action:
+                    action_name = self._action_to_method_name(step.action, step.target)
+                    pages_info[page_name]["actions"][action_name] = {
+                        "action": step.action,
+                        "target": step.target,
+                        "value": step.value,
+                        "description": step.description
+                    }
+            else:
+                # Для описательных шагов создаем действие на основе описания
+                action_name = self._extract_action_from_description(step.description)
                 pages_info[page_name]["actions"][action_name] = {
-                    "action": step.action,
-                    "target": step.target,
+                    "action": step.action,  # Может быть None, если еще не обработан StepGenerator
+                    "target": step.target,  # Может быть None
                     "value": step.value,
-                    "description": step.description
+                    "description": step.description,
+                    "expectedResult": step.expectedResult
                 }
         
         return pages_info
@@ -349,6 +387,9 @@ class PageObjectGenerator:
             "click": "click",
             "verify": "verify",
             "select": "select",
+            "download": "download",
+            "upload": "upload",
+            "wait": "wait",
         }
         
         base_name = action_map.get(action, action)
@@ -359,8 +400,38 @@ class PageObjectGenerator:
                 return f"fill_{element_name}"
             elif base_name == "click":
                 return f"click_{element_name}"
+            elif base_name == "download":
+                return f"download_{element_name}"
         
         return base_name
+    
+    def _extract_action_from_description(self, description: str) -> str:
+        """Извлечение имени действия из описания."""
+        description_lower = description.lower()
+        
+        # Генерация имени метода на основе ключевых слов
+        if any(word in description_lower for word in ["скачать", "download"]):
+            # Извлечение названия отчета
+            if "таблица кандидатов" in description_lower or "таблица кандидатов" in description:
+                return "download_candidates_table"
+            elif "профили добычи" in description_lower:
+                return "download_production_profiles"
+            elif "расчетные параметры" in description_lower:
+                return "download_calculation_parameters"
+            elif "кандидаты опт" in description_lower:
+                return "download_candidates_opt"
+            elif "кандидаты ппр" in description_lower or "кандидаты чрф" in description_lower:
+                return "download_candidates_ppr_chrf"
+            elif "реестр ошибок" in description_lower:
+                return "download_errors_register"
+            elif "мониторинг" in description_lower:
+                return "download_monitoring"
+            elif "дашборд" in description_lower:
+                return "download_dashboard"
+            else:
+                return "download_report"
+        
+        return "execute_action"
     
     def _page_name_to_class_name(self, page_name: str) -> str:
         """Преобразование имени страницы в имя класса."""
